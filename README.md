@@ -5,7 +5,8 @@ Using socks-proxy.net it builds a list of proxies able to be imported and ready 
 You need to download the code first:
 [DOWNLOAD](https://github.com/masterofobzene/JDproxygenerator/archive/refs/heads/main.zip)
 
-Then, with a CMD inside that decompressed folder (JDproxygenerator-main), install dependencies:
+Then, with a CMD inside that decompressed folder (e.g `cd C:\path\JDproxygenerator-main`), install dependencies:
+
 ```
 pip install -r requirements.txt
 ```
