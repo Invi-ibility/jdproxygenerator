@@ -27,13 +27,6 @@ def create_proxy_record(address, port, type, enabled):
     json_data = proxy_record
     return json_data
 
-
-def create_json_structure(proxies):
-    proxylist_json_structure = dict()
-    proxylist_json_structure["customProxyList"] = proxies
-    return proxylist_json_structure
-
-
 def get_proxies_from_socks_proxy_net():
     proxy_site_url = 'https://socks-proxy.net/#list'
     res = requests.get(proxy_site_url, headers={'User-Agent': user_agent})
@@ -53,6 +46,7 @@ def get_proxies_from_socks_proxy_net():
 
 proxy_list = list([create_proxy_record(type="NONE", address=None, port=80, enabled=True)])
 proxy_list = proxy_list + get_proxies_from_socks_proxy_net()
-json_output = create_json_structure(proxy_list)
+json_output = dict()
+json_output["customProxyList"] = proxy_list
 with open(filename, 'w') as f:
     json.dump(json_output, f, indent=2)
