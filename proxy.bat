@@ -1,14 +1,20 @@
 @ECHO OFF
-SETLOCAL ENABLEDELAYEDEXPANSION
+SETLOCAL
 
 REM --------------------------------------------------
 REM  proxy.bat - Setup and run proxy-scrapper.py
-REM  - Creates venv if needed
-REM  - On first run: uses requirements.txt -> ren to .bak -> install
-REM  - If requirements.txt.bak exists: SKIPS installs
+REM  - Detects Python 3
+REM  - If missing, creates virtual environment (venv)
+REM  - Installs dependencies once 
+REM  - Creates a marker file '.deps_installed' the first time dependencies are installed
+REM  - Runs proxy-scrapper.py
 REM --------------------------------------------------
 
 SET "CURRENT_DIR=%~dp0"
+SET "VENV_DIR=%CURRENT_DIR%env"
+SET "MARKER_FILE=%CURRENT_DIR%.deps_installed"
+SET "SCRIPT_NAME=proxy-scrapper.py"
+
 CD /D "%CURRENT_DIR%"
 
 ECHO.
@@ -16,83 +22,68 @@ ECHO === proxy.bat - starting in "%CURRENT_DIR%" ===
 ECHO.
 
 REM 1) Find Python
-SET "PYLAUNCHER="
-WHERE py >NUL 2>&1
-IF %ERRORLEVEL%==0 (
-    SET "PYLAUNCHER=py -3"
-) ELSE (
-    WHERE python >NUL 2>&1
-    IF %ERRORLEVEL%==0 (
-        SET "PYLAUNCHER=python"
-    ) ELSE (
-        ECHO ERROR: Python not found in PATH. Please install Python 3 and try again.
-        PAUSE
-        EXIT /B 1
+FOR %%P IN (py python) DO (
+    WHERE %%P >NUL 2>&1 && (
+        SET "PYLAUNCHER=%%P"
+        ECHO Python detected: %PYLAUNCHER%
+        GOTO CREATE_VENV
     )
 )
 
+CALL :FAIL "Python 3 was not found in PATH. Please install Python 3."
+GOTO :EOF
+
+:CREATE_VENV
 REM 2) Create venv if missing
-IF NOT EXIST "%CURRENT_DIR%env\Scripts\activate.bat" (
-    ECHO Creating virtual environment in "%CURRENT_DIR%env"...
-    %PYLAUNCHER% -m venv "%CURRENT_DIR%env"
-    IF %ERRORLEVEL% NEQ 0 (
-        ECHO Failed to create virtual environment.
-        PAUSE
-        EXIT /B 1
-    )
+IF NOT EXIST "%VENV_DIR%\Scripts\activate.bat" (
+    ECHO Creating virtual environment in "%VENV_DIR%"
+    %PYLAUNCHER% -m venv "%VENV_DIR%"
+    IF ERRORLEVEL 1 CALL :FAIL "Failed to create virtual environment."
 ) ELSE (
-    ECHO Virtual environment already exists: "%CURRENT_DIR%env"
+    ECHO Virtual environment already exists: "%VENV_DIR%"
 )
 
 REM 3) Activate venv
-CALL "%CURRENT_DIR%env\Scripts\activate.bat"
+CALL "%VENV_DIR%\Scripts\activate.bat"
 
-REM 4) Dependency logic (NO nested IFs)
+REM ---- Dependency installation (one-time) ----
+SET "VENV_PY=%VENV_DIR%\Scripts\python.exe"
 
-REM If backup exists -> skip installs
-IF EXIST "%CURRENT_DIR%requirements.txt.bak" GOTO SKIP_DEPS
+REM If marker file exists -> skip installs
+IF NOT EXIST "%MARKER_FILE%" (
+    IF NOT EXIST "%CURRENT_DIR%requirements.txt" (
+        CALL :FAIL "requirements.txt not found."
+    )
 
-REM If no backup but requirements.txt exists -> first run: backup + install
-IF EXIST "%CURRENT_DIR%requirements.txt" GOTO INSTALL_ONCE
+    REM If no marker file but requirements.txt exists -> first run: backup + install
+    ECHO Installing dependencies...
+    "%VENV_PY%" -m pip install --upgrade pip
+    "%VENV_PY%" -m pip install -r "%CURRENT_DIR%requirements.txt"
+    IF ERRORLEVEL 1 CALL :FAIL "Dependency installation failed."
 
-REM No requirements at all -> skip
-GOTO AFTER_DEPS
-
-:INSTALL_ONCE
-ECHO First run: backing up requirements.txt to requirements.txt.bak...
-REN "%CURRENT_DIR%requirements.txt" "requirements.txt.bak"
-IF %ERRORLEVEL% NEQ 0 (
-    ECHO WARNING: Failed to backup requirements.txt. Skipping dependency installation.
-    GOTO AFTER_DEPS
-)
-
-ECHO Installing dependencies from requirements.txt.bak (one-time)...
-"%CURRENT_DIR%env\Scripts\python.exe" -m pip install --upgrade pip
-"%CURRENT_DIR%env\Scripts\python.exe" -m pip install -r "%CURRENT_DIR%requirements.txt.bak"
-IF %ERRORLEVEL% NEQ 0 (
-    ECHO WARNING: Some dependencies may not have installed correctly.
-) ELSE (
     ECHO Dependencies installed successfully.
+    ECHO installed > "%MARKER_FILE%"
+) ELSE (
+    ECHO Dependencies already installed. Skipping.
 )
-GOTO AFTER_DEPS
-
-:SKIP_DEPS
-ECHO requirements.txt.bak found -> skipping dependency installation.
-GOTO AFTER_DEPS
-
-:AFTER_DEPS
 
 REM 5) Run proxy-scrapper.py
-IF EXIST "%CURRENT_DIR%proxy-scrapper.py" (
-    ECHO Running proxy-scrapper.py...
-    "%CURRENT_DIR%env\Scripts\python.exe" "%CURRENT_DIR%proxy-scrapper.py"
-    IF %ERRORLEVEL% NEQ 0 (
-        ECHO proxy-scrapper.py finished with errors.
-    ) ELSE (
-        ECHO proxy-scrapper.py executed successfully.
-    )
+IF NOT EXIST "%CURRENT_DIR%%SCRIPT_NAME%" (
+    CALL :FAIL "%SCRIPT_NAME% not found."
+)
+ECHO Running proxy-scrapper.py
+"%VENV_PY%" "%CURRENT_DIR%%SCRIPT_NAME%"
+IF ERRORLEVEL 1 (
+    ECHO WARNING: proxy-scrapper.py finished with errors.
 ) ELSE (
-    ECHO ERROR: proxy-scrapper.py not found in "%CURRENT_DIR%".
+    ECHO proxy-scrapper.py executed successfully.
+)
+
+REM ---- Check expected output ----
+IF EXIST "%CURRENT_DIR%proxylist.jdproxies" (
+    ECHO Proxy list generated: proxylist.jdproxies
+) ELSE (
+    ECHO WARNING: proxylist.jdproxies was not generated.
 )
 
 ECHO.
@@ -100,3 +91,12 @@ ECHO === proxy.bat - finished ===
 PAUSE
 ENDLOCAL
 EXIT /B 0
+
+REM ---- Error handler ----
+:FAIL
+ECHO.
+ECHO ERROR: %~1
+ECHO.
+PAUSE
+ENDLOCAL
+EXIT /B 1
