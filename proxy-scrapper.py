@@ -1,6 +1,7 @@
 """
 Proxy Scraper for JDownloader2
 """
+from __future__ import annotations
 import json
 import requests
 from bs4 import BeautifulSoup
@@ -16,6 +17,7 @@ USER_AGENT_HEADER = (
 
 # JDownloader2 proxy structure
 def create_proxy_record(
+        # address: Optional[str],
         address: str | None,
         port: int,
         proxy_type: str,
@@ -96,7 +98,7 @@ def main():
     with open(OUTPUT_FILE, 'w', encoding="utf-8") as file:
         json.dump(json_output, file, indent=2)
 
-    print(f"Generated {len(proxy_list)} proxies → {OUTPUT_FILE}")
+    print(f"Generated {len(proxy_list)} proxies -> {OUTPUT_FILE}")
 
 if __name__ == "__main__":
     main()
